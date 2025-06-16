@@ -14,21 +14,31 @@ if (!MONGODB_URI) {
 }
 
 // Initialize Vertex AI
-const vertex = new VertexAI({
-  project: 'intimitymaster',
-  location: 'us-central1',
-  keyFile: path.join(process.cwd(), 'key.json')
-});
+let vertex: VertexAI;
+let model: any;
 
-const model = vertex.preview.getGenerativeModel({
-  model: "gemini-pro",
-  generation_config: {
-    max_output_tokens: 2048,
-    temperature: 0.4,
-    top_p: 0.8,
-    top_k: 40
-  }
-});
+try {
+  vertex = new VertexAI({
+    project: 'intimitymaster',
+    location: 'us-central1',
+    keyFile: path.join(process.cwd(), 'google-credentials.json')
+  });
+
+  model = vertex.preview.getGenerativeModel({
+    model: "gemini-pro",
+    generation_config: {
+      max_output_tokens: 2048,
+      temperature: 0.4,
+      top_p: 0.8,
+      top_k: 40
+    }
+  });
+
+  console.log('✅ Chat Vertex AI initialized successfully');
+} catch (error) {
+  console.error('❌ Failed to initialize Chat Vertex AI:', error);
+  model = null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,6 +46,14 @@ export async function POST(request: NextRequest) {
 
     if (!message) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 })
+    }
+
+    if (!model) {
+      return NextResponse.json({ 
+        error: "Chat service is temporarily unavailable",
+        message: "The AI chat service is currently unavailable. Please try again later.",
+        medications: []
+      }, { status: 503 })
     }
 
     // Get collection
@@ -53,57 +71,34 @@ export async function POST(request: NextRequest) {
       .limit(5)
       .toArray()
 
-    // Create chat context with available medications
-    const chatContext = `You are MarmarAI, a medical assistant specialized in medication information and guidance. Your purpose is to help users understand medications while ensuring safety and proper medical guidance.
+    // Prepare chat context with medication information
+    const chatContext = `User Query: ${message}
 
-Role and Limitations:
-- You are NOT a doctor and cannot diagnose conditions or prescribe medications
-- You can ONLY provide information about medications in the authorized database
-- You must ALWAYS encourage consulting healthcare professionals for medical decisions
+Found Medications:
+${medications.map(med => `- ${med.drug} (${med.gpt4_form})`).join('\n')}
 
-Available Medications Database:
-${medications.map(med => `- ${med.drug} (${med.gpt4_form}): ${med.description}`).join('\n')}
+Please provide a helpful response about these medications, focusing on:
+1. How they relate to the user's query
+2. Key differences between the options
+3. General safety considerations
+4. When to consult a healthcare provider
 
-Core Guidelines:
-1. Safety First:
-   - NEVER recommend medications without understanding the user's situation
-   - ALWAYS ask about allergies and current medications before suggestions
-   - If symptoms are severe or concerning, IMMEDIATELY advise seeking medical attention
-
-2. Medication Information:
-   - ONLY suggest medications from the provided database
-   - Include dosage forms, common uses, and important warnings
-   - Explain potential side effects and drug interactions
-   - Use clear, non-technical language when possible
-
-3. Interaction Protocol:
-   - Ask clarifying questions when symptoms or needs are unclear
-   - Maintain a professional yet empathetic tone
-   - Structure responses clearly using markdown formatting
-   - Use bullet points and sections for better readability
-
-4. Required Disclaimers:
-   - Include a medical disclaimer in responses with medication information
-   - Emphasize the importance of professional medical advice
-   - Clarify that information is for educational purposes only
-
-Previous conversation:
-${conversation.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
-
-Current user message: ${message}
-
-Remember: Your primary goal is to educate and guide users to make informed decisions while ensuring their safety through proper medical consultation.`
+Keep the response concise and easy to understand.`
 
     // Get response from Vertex AI
-    const chat = model.startChat({
-      history: conversation.map(msg => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
-      }))
+    const history = conversation.map(msg => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }]
+    }));
+
+    // Add current message to history
+    history.push({
+      role: "user",
+      parts: [{ text: chatContext }]
     });
 
-    const result = await chat.sendMessage({
-      contents: [{ role: "user", parts: [{ text: chatContext }] }]
+    const result = await model.generateContent({
+      contents: history
     });
 
     const text = result.response.candidates[0].content.parts[0].text;
@@ -119,7 +114,11 @@ Remember: Your primary goal is to educate and guide users to make informed decis
   } catch (error) {
     console.error("Chat API error:", error)
     return NextResponse.json(
-      { error: "Failed to process your request. Please try again." },
+      { 
+        error: "Failed to process your request. Please try again.",
+        message: "Chat service is temporarily unavailable. Please try using the search function instead.",
+        medications: []
+      },
       { status: 500 }
     )
   }

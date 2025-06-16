@@ -27,6 +27,10 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
+.env.development
+.env.test
+.env.production
 
 # vercel
 .vercel
@@ -38,6 +42,11 @@ next-env.d.ts
 # Google Cloud credentials
 key.json
 google-credentials.json
+*credentials*.json
 
 # MongoDB
 *.mongodb
+mongodb*.js
+**/scripts/import-data.js
+**/scripts/seed*.ts
+**/scripts/import*.ts
