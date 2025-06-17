@@ -67,6 +67,15 @@ export async function initDatabase() {
     await db.command({ ping: 1 })
     console.log('✅ Connected to MongoDB successfully')
 
+    // Drop existing text indexes
+    const indexes = await collection.indexes()
+    for (const index of indexes) {
+      if (index.name.includes('text')) {
+        await collection.dropIndex(index.name)
+        console.log(`🗑️ Dropped existing text index: ${index.name}`)
+      }
+    }
+
     // Create text search index
     await collection.createIndex(
       { 
@@ -83,11 +92,13 @@ export async function initDatabase() {
         name: "text_search_index"
       }
     )
+    console.log('✅ Created new text search index')
 
     // Create regular indexes for regex searches
     await collection.createIndex({ drug: 1 })
     await collection.createIndex({ gpt4_form: 1 })
     await collection.createIndex({ description: 1 })
+    console.log('✅ Created regular indexes')
 
     // Log database status
     const stats = await db.stats()
