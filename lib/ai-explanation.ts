@@ -6,9 +6,25 @@ let model: any;
 let multimodalModel: any;
 
 try {
+  // Get project ID from environment variable
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'intimitymaster';
+
+  // In production, we'll use the credentials from environment variable
+  let credentials: any = undefined;
+  
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    try {
+      credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      console.log('✅ Loaded Google Cloud credentials from environment variable');
+    } catch (error) {
+      console.error('❌ Failed to parse Google Cloud credentials:', error);
+    }
+  }
+
   vertex = new VertexAI({
-    project: 'intimitymaster',
-    location: 'us-central1'
+    project: projectId,
+    location: 'us-central1',
+    credentials: credentials // This will be undefined in local (using default credentials) and set in production
   });
 
   // Initialize both models - one for text and one for multimodal
