@@ -12,6 +12,7 @@ import MedicationResults from "@/components/medication-results"
 import DatabaseStats from "@/components/database-stats"
 import SystemStatusComponent from "@/components/system-status"
 import GoogleCloudStatus from "@/components/google-cloud-status"
+import ChatInterface from "@/components/chat-interface"
 
 interface SearchResult {
   drug: string
@@ -177,7 +178,7 @@ export default function PillSightApp() {
           {/* Main Search Area */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="text" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="text" className="flex items-center gap-2">
                   <Search className="h-4 w-4" />
                   Text Search
@@ -185,6 +186,10 @@ export default function PillSightApp() {
                 <TabsTrigger value="voice" className="flex items-center gap-2">
                   <Mic className="h-4 w-4" />
                   Voice Input
+                </TabsTrigger>
+                <TabsTrigger value="chat" className="flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  AI Chat
                 </TabsTrigger>
                 <TabsTrigger value="stats" className="flex items-center gap-2">
                   <Activity className="h-4 w-4" />
@@ -304,6 +309,10 @@ export default function PillSightApp() {
 
               <TabsContent value="voice">
                 <VoiceRecorder onTranscript={handleVoiceResult} systemStatus={systemStatus} />
+              </TabsContent>
+
+              <TabsContent value="chat">
+                <ChatInterface onPlayAudio={playAudio} />
               </TabsContent>
 
               <TabsContent value="stats">
