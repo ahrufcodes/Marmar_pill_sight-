@@ -13,66 +13,62 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔄 Processing search query:', query)
+    const collection = await getCollection('drug_forms')
 
-    // Generate embedding for the search query
-    const queryEmbedding = await SentenceTransformer.encode(query)
+    // Try text search first
+    const textResults = await collection
+      .find(
+        { $text: { $search: query } },
+        { score: { $meta: "textScore" } }
+      )
+      .sort({ score: { $meta: "textScore" } })
+      .limit(10)
+      .toArray()
 
-    // Perform vector search
-    console.log('🔄 Performing vector search...')
-    const searchResults = await vectorSearch(queryEmbedding)
-
-    // Map confidence levels based on similarity scores
-    const resultsWithConfidence = searchResults.map(result => ({
-      ...result,
-      match_confidence: result.similarity_score > 80 ? "High" : result.similarity_score > 60 ? "Medium" : "Low"
-    }))
-
-    console.log(`✅ Found ${resultsWithConfidence.length} results`)
-
-    // If we have results, try to get AI explanations
-    if (resultsWithConfidence.length > 0) {
-      try {
-        console.log('🤖 Generating AI explanations for', resultsWithConfidence.length, 'results')
-        const resultsWithExplanations = await Promise.all(
-          resultsWithConfidence.map(async (result) => {
-            try {
-              console.log('📝 Generating explanation for:', result.drug)
-              const explanation = await getAIExplanation(result)
-              console.log('✅ Generated explanation for:', result.drug)
-              return {
-                ...result,
-                ai_explanation: explanation
-              }
-            } catch (aiError) {
-              console.error("AI Explanation error for", result.drug, ":", aiError)
-              return {
-                ...result,
-                ai_explanation: "AI explanation unavailable at the moment."
-              }
-            }
-          })
-        )
-        return NextResponse.json({ results: resultsWithExplanations })
-      } catch (aiError) {
-        console.error("AI Explanations batch error:", aiError)
-        // Return results without AI explanations if AI fails
-        return NextResponse.json({ 
-          results: resultsWithConfidence,
-          warning: "AI explanations are temporarily unavailable."
-        })
-      }
+    if (textResults.length > 0) {
+      return NextResponse.json({
+        results: textResults.map(result => ({
+          ...result,
+          confidence: "high",
+          source: "database",
+          similarity_score: 90 // High confidence text match
+        }))
+      })
     }
 
-    // No results found
-    return NextResponse.json({ 
-      results: [],
-      message: "No matching medications found." 
-    })
+    // Fallback to regex search
+    const regexResults = await collection
+      .find({
+        $or: [
+          { drug: { $regex: query, $options: "i" } },
+          { gpt4_form: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+          { common_uses: { $regex: query, $options: "i" } }
+        ]
+      })
+      .limit(10)
+      .toArray()
 
+    if (regexResults.length > 0) {
+      return NextResponse.json({
+        results: regexResults.map(result => ({
+          ...result,
+          confidence: "medium",
+          source: "database",
+          similarity_score: 70 // Medium confidence regex match
+        }))
+      })
+    }
+
+    return NextResponse.json({
+      results: [],
+      message: "No matching medications found. Try rephrasing your search or using different keywords."
+    })
   } catch (error) {
-    console.error("Search API error:", error)
-    return NextResponse.json({ 
-      error: "An unexpected error occurred. Please try again later." 
-    }, { status: 500 })
+    console.error("Search error:", error)
+    return NextResponse.json(
+      { error: "Failed to search medications" },
+      { status: 500 }
+    )
   }
 }

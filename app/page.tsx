@@ -6,19 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Mic, Search, Upload, Brain, Cloud, Pill, Activity, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
+import { Mic, Search, Upload, Brain, Cloud, Pill, Activity, AlertCircle, CheckCircle, Loader2, Globe } from "lucide-react"
 import VoiceRecorder from "@/components/voice-recorder"
 import MedicationResults from "@/components/medication-results"
 import DatabaseStats from "@/components/database-stats"
 import SystemStatusComponent from "@/components/system-status"
 import GoogleCloudStatus from "@/components/google-cloud-status"
+import MedCompare from "@/components/med-compare"
 
 interface SearchResult {
   drug: string
   gpt4_form: string
   similarity_score: number
   description?: string
-  match_confidence: "High" | "Medium" | "Low"
+  confidence: "high" | "medium" | "low"
+  source: "database" | "ai"
 }
 
 interface SystemStatus {
@@ -177,7 +179,7 @@ export default function PillSightApp() {
           {/* Main Search Area */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="text" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="text" className="flex items-center gap-2">
                   <Search className="h-4 w-4" />
                   Text Search
@@ -185,6 +187,10 @@ export default function PillSightApp() {
                 <TabsTrigger value="voice" className="flex items-center gap-2">
                   <Mic className="h-4 w-4" />
                   Voice Input
+                </TabsTrigger>
+                <TabsTrigger value="compare" className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  MedCompare
                 </TabsTrigger>
                 <TabsTrigger value="stats" className="flex items-center gap-2">
                   <Activity className="h-4 w-4" />
@@ -278,14 +284,14 @@ export default function PillSightApp() {
                                 <div key={idx} className="text-xs text-gray-600 flex items-center gap-2">
                                   <span
                                     className={
-                                      result.similarity_score > 80
+                                      result.confidence === "high"
                                         ? "text-green-600"
-                                        : result.similarity_score > 60
+                                        : result.confidence === "medium"
                                           ? "text-yellow-600"
                                           : "text-orange-600"
                                     }
                                   >
-                                    {result.similarity_score > 80 ? "🟢" : result.similarity_score > 60 ? "🟡" : "🟠"}
+                                    {result.confidence === "high" ? "🟢" : result.confidence === "medium" ? "🟡" : "🟠"}
                                   </span>
                                   <span>
                                     {result.drug} ({result.gpt4_form})
@@ -304,6 +310,10 @@ export default function PillSightApp() {
 
               <TabsContent value="voice">
                 <VoiceRecorder onTranscript={handleVoiceResult} systemStatus={systemStatus} />
+              </TabsContent>
+
+              <TabsContent value="compare" className="space-y-6">
+                <MedCompare />
               </TabsContent>
 
               <TabsContent value="stats">

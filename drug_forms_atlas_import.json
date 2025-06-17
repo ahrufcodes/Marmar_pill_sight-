@@ -1,0 +1,32 @@
+[
+  {
+    "drug": "Paracetamol",
+    "gpt4_form": "Tablet",
+    "description": "Common pain reliever and fever reducer",
+    "common_uses": "Pain relief, fever reduction, headache"
+  },
+  {
+    "drug": "Ibuprofen",
+    "gpt4_form": "Tablet",
+    "description": "Non-steroidal anti-inflammatory drug (NSAID)",
+    "common_uses": "Pain relief, inflammation, fever"
+  },
+  {
+    "drug": "Aspirin",
+    "gpt4_form": "Tablet",
+    "description": "Pain reliever and blood thinner",
+    "common_uses": "Pain relief, fever reduction, heart attack prevention"
+  },
+  {
+    "drug": "Amoxicillin",
+    "gpt4_form": "Capsule",
+    "description": "Penicillin antibiotic",
+    "common_uses": "Bacterial infections, chest infections, dental infections"
+  },
+  {
+    "drug": "Omeprazole",
+    "gpt4_form": "Capsule",
+    "description": "Proton pump inhibitor",
+    "common_uses": "Acid reflux, heartburn, stomach ulcers"
+  }
+] 

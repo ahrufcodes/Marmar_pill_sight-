@@ -1,52 +1,37 @@
-import { NextResponse } from 'next/server'
-import { MongoClient } from 'mongodb'
+import { NextResponse } from "next/server"
+import { getCollection, initDatabase } from "@/lib/db"
 
 export async function GET() {
-  const uri = process.env.MONGODB_URI
-  if (!uri) {
-    return NextResponse.json({ error: 'MongoDB URI not found' })
-  }
-
-  const client = new MongoClient(uri)
-
   try {
-    await client.connect()
-    
-    // Check DrugFormDB
-    const drugFormDb = client.db('DrugFormDB')
-    const drugFormCollections = await drugFormDb.listCollections().toArray()
-    const drugFormStats = {
-      collections: drugFormCollections.map(c => c.name),
-      counts: {}
-    }
-    
-    // Get counts for each collection
-    for (const collection of drugFormCollections) {
-      drugFormStats.counts[collection.name] = await drugFormDb.collection(collection.name).countDocuments()
-    }
+    // Initialize database
+    const initResult = await initDatabase()
+    console.log('Database initialization result:', initResult)
 
-    // Check marmar-pillsight
-    const marmarDb = client.db('marmar-pillsight')
-    const marmarCollections = await marmarDb.listCollections().toArray()
-    const marmarStats = {
-      collections: marmarCollections.map(c => c.name),
-      counts: {}
-    }
+    // Get collection
+    const collection = await getCollection('drug_forms')
     
-    // Get counts for each collection
-    for (const collection of marmarCollections) {
-      marmarStats.counts[collection.name] = await marmarDb.collection(collection.name).countDocuments()
-    }
+    // Get total count
+    const totalMedications = await collection.countDocuments()
+
+    // Get sample documents
+    const sampleDocs = await collection
+      .find({})
+      .limit(5)
+      .toArray()
 
     return NextResponse.json({
-      DrugFormDB: drugFormStats,
-      'marmar-pillsight': marmarStats
+      status: "success",
+      initialized: initResult,
+      totalMedications,
+      sampleDocs,
+      indexes: await collection.indexes()
     })
-
   } catch (error) {
-    console.error('Database check error:', error)
-    return NextResponse.json({ error: 'Failed to check databases' }, { status: 500 })
-  } finally {
-    await client.close()
+    console.error("Database check error:", error)
+    return NextResponse.json({ 
+      status: "error",
+      error: "Failed to check database status",
+      details: error instanceof Error ? error.message : "Unknown error"
+    }, { status: 500 })
   }
 } 

@@ -4,16 +4,16 @@ import * as dotenv from 'dotenv'
 // Load environment variables
 dotenv.config({ path: '.env.local' })
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env.local')
-}
-
-export const MONGODB_URI = process.env.MONGODB_URI
-export const DB_NAME = process.env.MONGODB_DB || "marmar-pillsight"
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017"
+export const DB_NAME = "marmar_pillsight"
 export const COLLECTION_NAME = "drug_forms"
 
 let client: MongoClient
 let clientPromise: Promise<MongoClient>
+
+if (!MONGODB_URI) {
+  throw new Error("Please add your Mongo URI to .env.local")
+}
 
 if (process.env.NODE_ENV === 'development') {
   // In development mode, use a global variable so that the value
@@ -61,39 +61,33 @@ export async function initDatabase() {
     console.log('🔄 Initializing database connection...')
     const client = await clientPromise
     const db = client.db(DB_NAME)
+    const collection = db.collection(COLLECTION_NAME)
     
     // Verify the connection
     await db.command({ ping: 1 })
     console.log('✅ Connected to MongoDB successfully')
 
-    // Create indexes if they don't exist
-    const collections = await db.listCollections().toArray()
-    const drugFormsExists = collections.some(col => col.name === 'drug_forms')
+    // Create text search index
+    await collection.createIndex(
+      { 
+        drug: "text",
+        gpt4_form: "text",
+        description: "text"
+      },
+      {
+        weights: {
+          drug: 10,
+          gpt4_form: 5,
+          description: 1
+        },
+        name: "text_search_index"
+      }
+    )
 
-    if (!drugFormsExists) {
-      console.log('📦 Creating drug_forms collection and indexes...')
-      await db.createCollection('drug_forms')
-      
-      // Create indexes
-      const indexPromises = [
-        db.collection('drug_forms').createIndex({ drug: 1 }, { background: true }),
-        db.collection('drug_forms').createIndex({ gpt4_form: 1 }, { background: true }),
-        db.collection('drug_forms').createIndex(
-          { description: "text" }, 
-          { 
-            background: true,
-            weights: {
-              drug: 10,
-              gpt4_form: 5,
-              description: 1
-            }
-          }
-        )
-      ]
-
-      await Promise.all(indexPromises)
-      console.log('✅ Indexes created successfully')
-    }
+    // Create regular indexes for regex searches
+    await collection.createIndex({ drug: 1 })
+    await collection.createIndex({ gpt4_form: 1 })
+    await collection.createIndex({ description: 1 })
 
     // Log database status
     const stats = await db.stats()

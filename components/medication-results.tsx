@@ -14,7 +14,8 @@ interface SearchResult {
   gpt4_form: string
   similarity_score: number
   description?: string
-  match_confidence: "High" | "Medium" | "Low"
+  confidence: "high" | "medium" | "low"
+  source: "database" | "ai"
   ai_explanation?: string
 }
 
@@ -24,28 +25,36 @@ interface MedicationResultsProps {
 }
 
 export default function MedicationResults({ results, onPlayAudio }: MedicationResultsProps) {
-  const getConfidenceColor = (score: number) => {
-    if (score > 80) return "text-green-600"
-    if (score > 60) return "text-yellow-600"
-    return "text-orange-600"
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case "high":
+        return "text-green-600"
+      case "medium":
+        return "text-yellow-600"
+      default:
+        return "text-orange-600"
+    }
   }
 
-  const getConfidenceIcon = (score: number) => {
-    if (score > 80) return "🟢"
-    if (score > 60) return "🟡"
-    return "🟠"
+  const getConfidenceIcon = (confidence: string) => {
+    switch (confidence) {
+      case "high":
+        return "🟢"
+      case "medium":
+        return "🟡"
+      default:
+        return "🟠"
+    }
   }
 
   const getConfidenceBadge = (confidence: string) => {
     switch (confidence) {
-      case "High":
+      case "high":
         return <Badge className="bg-green-100 text-green-800">High Match</Badge>
-      case "Medium":
+      case "medium":
         return <Badge className="bg-yellow-100 text-yellow-800">Medium Match</Badge>
-      case "Low":
-        return <Badge className="bg-orange-100 text-orange-800">Low Match</Badge>
       default:
-        return <Badge variant="secondary">Unknown</Badge>
+        return <Badge className="bg-orange-100 text-orange-800">Low Match</Badge>
     }
   }
 
@@ -75,9 +84,9 @@ export default function MedicationResults({ results, onPlayAudio }: MedicationRe
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{getConfidenceIcon(result.similarity_score)}</span>
+                  <span className="text-lg">{getConfidenceIcon(result.confidence)}</span>
                   <h3 className="font-semibold text-lg">{result.drug}</h3>
-                  {getConfidenceBadge(result.match_confidence)}
+                  {getConfidenceBadge(result.confidence)}
                 </div>
 
                 <div className="space-y-2">
@@ -130,7 +139,7 @@ export default function MedicationResults({ results, onPlayAudio }: MedicationRe
               <div className="text-right space-y-2">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Match Score</p>
-                  <p className={`text-lg font-bold ${getConfidenceColor(result.similarity_score)}`}>
+                  <p className={`text-lg font-bold ${getConfidenceColor(result.confidence)}`}>
                     {result.similarity_score.toFixed(1)}%
                   </p>
                   <Progress value={result.similarity_score} className="w-20 h-2" />

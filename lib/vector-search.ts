@@ -9,144 +9,104 @@ export async function initVectorSearch() {
     const db = client.db(DB_NAME);
     const collection = db.collection(COLLECTION_NAME);
 
-    // Create text search index as fallback
+    // Drop existing text indexes
+    const indexes = await collection.indexes();
+    const textIndexes = indexes.filter(index => index.name.includes('text'));
+    for (const index of textIndexes) {
+      await collection.dropIndex(index.name);
+    }
+
+    // Create text search index with updated weights
     console.log('📊 Creating text search index...');
     await collection.createIndex(
       { 
         drug: "text",
         gpt4_form: "text",
-        description: "text"
+        description: "text",
+        common_uses: "text"
       },
       {
         weights: {
           drug: 10,
           gpt4_form: 5,
-          description: 1
+          description: 2,
+          common_uses: 1
         },
-        name: "text_search_index"
+        name: "text_search",
+        default_language: "english"
       }
     );
 
-    // Try to create vector search index if supported
-    try {
-      const indexName = "vector_index";
-      const indexes = await collection.listIndexes().toArray();
-      console.log('Current indexes:', indexes);
-      const indexExists = indexes.some(index => index.name === indexName);
-      
-      if (!indexExists) {
-        console.log('Creating vector search index...');
-        await db.command({
-          createSearchIndex: COLLECTION_NAME,
-          name: indexName,
-          definition: {
-            mappings: {
-              dynamic: true,
-              fields: {
-                embeddings: {
-                  dimensions: 384,
-                  similarity: "euclidean",
-                  type: "knnVector",
-                }
-              }
-            }
-          }
-        });
-        console.log('✅ Vector search index created successfully');
-        return { vectorSearch: true };
-      } else {
-        console.log('ℹ️ Vector search index already exists');
-        return { vectorSearch: true };
-      }
-    } catch (vectorError) {
-      console.log('ℹ️ Vector search not available, using text search fallback');
-      return { vectorSearch: false };
-    }
+    // Create regular indexes for exact matches
+    await collection.createIndex({ drug: 1 });
+    await collection.createIndex({ gpt4_form: 1 });
+
+    return true;
   } catch (error) {
     console.error('❌ Failed to initialize search:', error);
-    return { vectorSearch: false };
+    return false;
   }
 }
 
-// Function to perform vector search
-export async function vectorSearch(queryEmbedding: number[], limit: number = 5) {
+// Perform vector search
+export async function vectorSearch(query: string, limit: number = 5) {
   try {
-    console.log('🔍 Performing vector search with embedding:', queryEmbedding.slice(0, 5), '...');
     const client = await clientPromise;
-    const collection = client.db(DB_NAME).collection(COLLECTION_NAME);
+    const db = client.db(DB_NAME);
+    const collection = db.collection(COLLECTION_NAME);
 
-    try {
-      // Try vector search first
-      const results = await collection.aggregate([
-        {
-          $search: {
-            index: "vector_index",
-            knnBeta: {
-              vector: queryEmbedding,
-              path: "embeddings",
-              k: limit
-            }
-          }
-        },
-        {
-          $project: {
-            drug: 1,
-            gpt4_form: 1,
-            description: 1,
-            score: { $meta: "searchScore" }
-          }
-        }
-      ]).toArray();
+    // First try text search
+    const textResults = await collection
+      .find(
+        { $text: { $search: query } },
+        { score: { $meta: "textScore" } }
+      )
+      .sort({ score: { $meta: "textScore" } })
+      .limit(limit)
+      .toArray();
 
-      if (results.length > 0) {
-        console.log(`✅ Vector search found ${results.length} results`);
-        return results.map(result => ({
-          ...result,
-          similarity_score: Math.max(0, Math.min(100, (1 - result.score) * 100))
-        }));
-      }
-    } catch (vectorError) {
-      console.log('ℹ️ Vector search failed, falling back to text search');
+    if (textResults.length > 0) {
+      return textResults;
     }
 
-    // Fallback to text search
-    const searchText = await generateSearchText(queryEmbedding);
-    const results = await collection.find(
-      { $text: { $search: searchText } },
-      {
-        score: { $meta: "textScore" },
-        projection: {
-          drug: 1,
-          gpt4_form: 1,
-          description: 1
-        }
-      }
-    )
-    .sort({ score: { $meta: "textScore" } })
-    .limit(limit)
-    .toArray();
-
-    console.log(`✅ Text search found ${results.length} results`);
-    return results.map(result => ({
-      ...result,
-      similarity_score: Math.max(0, Math.min(100, result.score * 50)) // Convert text score to percentage
-    }));
-
+    // Fallback to regex search
+    return await collection
+      .find({
+        $or: [
+          { drug: { $regex: query, $options: "i" } },
+          { gpt4_form: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+          { common_uses: { $regex: query, $options: "i" } }
+        ]
+      })
+      .limit(limit)
+      .toArray();
   } catch (error) {
-    console.error('❌ Search error:', error);
-    throw error;
+    console.error('❌ Vector search error:', error);
+    return [];
   }
 }
 
-// Helper function to convert embedding back to searchable text
+// Helper function to convert embedding to search terms
 async function generateSearchText(embedding: number[]): Promise<string> {
-  // Use the most significant dimensions to generate search terms
-  const significantTerms = embedding
+  // Get the most significant dimensions
+  const significantDimensions = embedding
     .map((value, index) => ({ value: Math.abs(value), index }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 5)
-    .map(item => `dimension_${item.index}`)
-    .join(' ');
+    .slice(0, 10);
   
-  return significantTerms;
+  // Convert to search terms based on the medical domain
+  const searchTerms = significantDimensions.map(dim => {
+    const value = embedding[dim.index];
+    // Map dimensions to common medical search terms
+    const terms = [
+      'medication', 'drug', 'medicine',
+      'tablet', 'capsule', 'syrup',
+      'pain', 'relief', 'treatment',
+      'symptom', 'condition', 'health'
+    ];
+    return terms[dim.index % terms.length];
+  });
+  
+  return searchTerms.join(' ');
 } 
